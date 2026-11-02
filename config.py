@@ -19,7 +19,7 @@ TRAY_MUTEX = "BatteryTrayMutex"  # installer/battery-tray.iss usa el mismo nombr
 WINDOW_MUTEX = "BatteryTraySettingsMutex"
 
 KINDS = ("mouse", "headset", "gamepad", "keyboard", "other")
-DEFAULTS = {"devices": [], "streamdeck": True, "low_level": 15}
+DEFAULTS = {"devices": [], "streamdeck": True, "low_level": 15, "auto_update": True}
 DEFAULT_COLOUR = "#46D26E"
 REQUIRED = {"id", "driver", "name", "ref"}
 ERROR_ALREADY_EXISTS = 183

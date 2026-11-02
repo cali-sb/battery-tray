@@ -13,12 +13,15 @@ from PySide6.QtQuickControls2 import QQuickStyle
 
 import config
 import devices
+import updater
+from version import __version__
 
 
 class Backend(QObject):
     devicesChanged = Signal()
     candidatesChanged = Signal()
     liveChanged = Signal()
+    updateChanged = Signal()
     scanningChanged = Signal()
     scanFinished = Signal(list)
 
@@ -27,6 +30,7 @@ class Backend(QObject):
         self._settings = config.load()
         self._candidates = []
         self._live = {}
+        self._update = None  # None hasta la primera lectura.
         self._scanning = False
         self.scanFinished.connect(self._on_scan)
         self._timer = QTimer(self, interval=1000, timeout=self._refresh_live)
@@ -48,6 +52,39 @@ class Backend(QObject):
         if data != self._live:
             self._live = data
             self.liveChanged.emit()
+        status = updater.read_status()
+        # Solo si empieza con la ventana abierta: un «installing» viejo, de una
+        # actualización que no llegó a terminar, no debe cerrarla nada más abrirla.
+        starting = (status.get("status") == "installing" and self._update is not None
+                    and self._update.get("status") != "installing")
+        if status != self._update:
+            self._update = status
+            self.updateChanged.emit()
+        if starting:
+            QGuiApplication.quit()  # Suelta sus archivos; el instalador espera a que se cierre.
+
+    @Property(str, constant=True)
+    def version(self):
+        return __version__
+
+    @Property("QVariantMap", notify=updateChanged)
+    def update(self):
+        """update.json del programa de fondo; vacío si no está en marcha."""
+        return self._update
+
+    @Property(bool, constant=True)
+    def autoUpdate(self):
+        return self._settings["auto_update"]
+
+    @Slot(bool)
+    def setAutoUpdate(self, enabled):
+        self._reload()
+        self._settings["auto_update"] = enabled
+        self._save()
+
+    @Slot(str)
+    def requestUpdate(self, action):
+        updater.request(action)
 
     @Property("QVariantList", notify=devicesChanged)
     def devices(self):

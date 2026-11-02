@@ -58,6 +58,7 @@ ApplicationWindow {
         search: "M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM20.5 20.5l-4.6-4.6",
         tune: "M4 7h9M18 7h2M15.5 4.5v5M4 17h2M11 17h9M8.5 14.5v5",
         plus: "M12 5v14M5 12h14",
+        download: "M12 4v11M7 10l5 5 5-5M5 20h14",
         trash: "M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"
     })
     readonly property var kinds: [
@@ -1035,6 +1036,54 @@ ApplicationWindow {
                         text: lowSlider.value > 0 ? lowSlider.value + " %" : "Sin aviso"
                         color: t.text
                         font.weight: Font.DemiBold
+                    }
+                }
+                SettingRow {
+                    Layout.leftMargin: 28
+                    Layout.rightMargin: 28
+                    heading: "Actualizar automáticamente"
+                    detail: "Busca versiones nuevas en GitHub al arrancar y cada 6 horas, y las instala sin preguntar. Los ajustes se conservan."
+                    Toggle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        checked: backend.autoUpdate
+                        onToggled: backend.setAutoUpdate(checked)
+                    }
+                }
+                SettingRow {
+                    id: updateRow
+                    readonly property var info: backend.update || {}
+                    readonly property string status: info.status || ""
+                    readonly property var available: info.available || {}
+                    readonly property bool busy: ["checking", "downloading", "installing"].includes(status)
+                    Layout.leftMargin: 28
+                    Layout.rightMargin: 28
+                    heading: "Versión " + backend.version
+                    detail: !status ? "El programa de fondo no está en marcha; ábrelo para buscar actualizaciones."
+                          : info.message + (status === "available" && available.notes ? "\n\n" + available.notes : "")
+                    Spinner {
+                        visible: updateRow.busy
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    AppButton {
+                        visible: updateRow.status !== "" && updateRow.status !== "available"
+                        enabled: !updateRow.busy
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Buscar ahora"
+                        onClicked: backend.requestUpdate("check")
+                    }
+                    AppButton {
+                        visible: updateRow.status === "available" && updateRow.info.installable
+                        anchors.verticalCenter: parent.verticalCenter
+                        primary: true
+                        icon_: "download"
+                        text: "Instalar " + (updateRow.available.version || "")
+                        onClicked: backend.requestUpdate("install")
+                    }
+                    AppButton {
+                        visible: updateRow.status === "available" && !updateRow.info.installable
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Ver en GitHub"
+                        onClicked: Qt.openUrlExternally(updateRow.available.url)
                     }
                 }
                 Item { Layout.fillHeight: true }

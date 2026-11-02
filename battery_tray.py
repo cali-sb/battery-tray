@@ -24,6 +24,7 @@ from PIL import Image, ImageColor, ImageDraw, ImageFont
 from pystray._util import serialized_image, win32
 
 import config
+import updater
 from devices import READERS
 
 PORT = 47631
@@ -38,6 +39,7 @@ state = {}
 settings = config.load()
 quit_event = threading.Event()
 api_server = None
+updates = updater.Updater(auto=lambda: settings["auto_update"], on_install=quit_event.set)
 
 
 def load_state():
@@ -339,6 +341,10 @@ def menu_items():
     pairs, _ = snapshot()
     items = [pystray.MenuItem(line(s), toggler(d["id"]), checked=lambda item, on=d.get("tray", True): on)
              for d, s in pairs]
+    if updates.available and updater.installed():
+        items += [pystray.Menu.SEPARATOR,
+                  pystray.MenuItem(f"Actualizar a la {updates.available['version']}",
+                                   lambda icon, _: updates.ask("install"))]
     return [*items, pystray.Menu.SEPARATOR, pystray.MenuItem("Ajustes…", open_settings),
             pystray.MenuItem("Salir", lambda icon, _: quit_event.set())]
 
@@ -419,10 +425,12 @@ def run():
     stamp = config.modified()
     apply_settings(icons, size, light)
     threading.Thread(target=worker, daemon=True).start()
+    threading.Thread(target=updates.run, daemon=True).start()
     if not settings["devices"]:
         open_settings()
     promoted = False
     while not quit_event.wait(1.5):
+        updates.poll()
         promoted = promoted or promote_tray()
         if config.modified() != stamp:
             stamp = config.modified()

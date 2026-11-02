@@ -6,12 +6,13 @@ Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dis
 
 ## Uso
 
-- **Instalar:** `Bateria-2.0.0-setup.exe`, sin permisos de administrador. El primer arranque abre los ajustes en la pestaña Buscar.
+- **Instalar:** el `Bateria-X.Y.Z-setup.exe` de la [última release](https://github.com/cali-sb/battery-tray/releases/latest), sin permisos de administrador. El primer arranque abre los ajustes en la pestaña Buscar.
+- **Actualizar:** es automático. El programa busca en las releases de GitHub un minuto después de arrancar y luego cada 6 horas. Si hay una versión nueva, la descarga, comprueba su SHA-256, la instala en silencio y vuelve a abrirse. En *General* se puede desactivar; entonces la versión nueva se instala con el botón de esa pestaña o desde el menú de la bandeja.
 - **Bandeja:** un icono por dispositivo, solo mientras gasta batería: apagado o cargando, desaparece. Si no queda ninguno sale una pila vacía, que solo sirve para abrir el menú. Con clic derecho, las casillas de la lista eligen qué dispositivos pueden mostrarse, y «Ajustes…» abre la ventana.
 - **Ajustes:**
   - *Dispositivos:* nombre, tipo, colores y quitar.
   - *Buscar:* lo que hay en el PC y si es compatible.
-  - *General:* API del Stream Deck y aviso de batería baja. Los cambios se aplican solos.
+  - *General:* API del Stream Deck, aviso de batería baja y actualizaciones. Los cambios se aplican solos.
 - **Colores:** cada dispositivo usa color fijo o según nivel (verde desde 30 %, ámbar desde 15 %, rojo por debajo). Con color fijo, por debajo del aviso el número pasa a blanco sobre rojo.
 - **Stream Deck:** acción «Batería» en la categoría del mismo nombre, con un desplegable para elegir dispositivo. El anillo marca el nivel, el rayo sustituye al icono mientras carga y el gris indica el último dato. Las teclas por dispositivo de la versión 1 siguen funcionando, aunque esas acciones ya no salen en la lista.
 - **API local:** `http://127.0.0.1:47631/battery.json`, solo en este PC. Existe para el Stream Deck y se puede desactivar; sin ella las teclas muestran `--`.
@@ -64,6 +65,7 @@ Si el aparato usa otro esquema, como los informes `feature` de Razer, hace falta
 - **Iconos ocultos:** Windows mete en el desplegable «^» los iconos de un ejecutable nuevo. `promote_tray` pone `IsPromoted` en su entrada de `NotifyIconSettings` solo si no existe, para respetar lo que elija el usuario después. La entrada es por ejecutable, no por icono.
 - **pystray:** `TrayIcon` dibuja al tamaño real de la bandeja y evita reutilizar la imagen de antes de esconderse. Toca métodos internos, así que la versión va fijada.
 - **Una sola instancia:** la garantiza un mutex con nombre, no el puerto, porque la API se puede apagar. El instalador usa los mismos nombres en `AppMutex`.
+- **Actualizar sin carreras:** solo el programa de fondo busca e instala; la ventana lo lee de `update.json` y le pide cosas con `update-request`. El programa lanza el instalador y se cierra. Al ver `/update=1`, el instalador espera a que se suelten los mutex antes de su comprobación de `AppMutex`, que en silencio abortaría. Luego lo reabre a través del Explorador, para que no herede las variables de PyInstaller del proceso viejo.
 
 ## Desarrollo
 
@@ -77,7 +79,15 @@ py -3.13 -m venv .venv
 .\build.ps1                                            # Instalador en build\installer
 ```
 
-`build.ps1` necesita Inno Setup 6. El `.exe` instalado y el de desarrollo no pueden correr a la vez.
+`build.ps1` necesita Inno Setup 6. El `.exe` instalado y el de desarrollo no pueden correr a la vez. Desde el código fuente el programa avisa de versiones nuevas, pero no se instala.
+
+### Publicar una versión
+
+1. Subir el número en `version.py`, la única fuente: la leen el programa, el instalador y la etiqueta.
+2. Hacer commit en `main`.
+3. Ejecutar `.\release.ps1 -Notes "Qué cambia."`.
+
+El script compila y sube `main`. Después crea la etiqueta `X.Y.Z` y publica la release con el instalador; para eso hace falta `gh` con sesión iniciada. Los programas instalados la encuentran solos. El actualizador ignora borradores, pre-releases y etiquetas que no sean `X.Y.Z`, y solo acepta un asset cuyo nombre contenga `setup` y acabe en `.exe`.
 
 Para probar el plugin sin instalador, enlazar la carpeta y reiniciar el Stream Deck:
 
