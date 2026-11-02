@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Batería</title></head>
+<body>
+<canvas id="c"></canvas>
+<script src="key.js"></script>
+<script>
+const URL_ESTADO = "http://127.0.0.1:47631/battery.json";
+const keys = new Map(); // contexto -> dispositivo
+let socket, data = null;
+
+function paint(context) {
+  const key = keys.get(context);
+  const image = renderKey(document.getElementById("c"), key, data && data[key]);
+  socket.send(JSON.stringify({ event: "setImage", context, payload: { image, target: 0 } }));
+}
+
+async function refresh() {
+  try {
+    data = await (await fetch(URL_ESTADO, { cache: "no-store" })).json();
+  } catch (e) {
+    data = null;
+  }
+  keys.forEach((_, context) => paint(context));
+}
+
+function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
+  socket = new WebSocket("ws://127.0.0.1:" + port);
+  socket.onopen = () => socket.send(JSON.stringify({ event: registerEvent, uuid }));
+  socket.onmessage = (msg) => {
+    const m = JSON.parse(msg.data);
+    if (m.event === "willAppear") {
+      keys.set(m.context, m.action.split(".").pop());
+      paint(m.context);
+      refresh();
+    } else if (m.event === "willDisappear") {
+      keys.delete(m.context);
+    } else if (m.event === "keyDown") {
+      refresh();
+    }
+  };
+  setInterval(refresh, 15000);
+}
+</script>
+</body>
+</html>
