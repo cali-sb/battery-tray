@@ -37,6 +37,8 @@ LOW_TEXT = (255, 255, 255, 255)
 log = logging.getLogger("battery-tray")
 lock = threading.Lock()
 state = {}
+changes = threading.Condition()  # Avisa de cada cambio en state; version los cuenta.
+version = 0
 settings = config.load()
 quit_event = threading.Event()
 api_server = None
@@ -54,11 +56,15 @@ def load_state():
 
 
 def write_state():
+    global version
     with lock:
         snapshot = json.dumps(state, ensure_ascii=False)
     tmp = config.STATE_FILE.with_suffix(".tmp")
     tmp.write_text(snapshot, encoding="utf-8")
     tmp.replace(config.STATE_FILE)
+    with changes:  # Despierta al Stream Deck, que espera a que algo cambie.
+        version += 1
+        changes.notify_all()
 
 
 def sync_state():
@@ -131,12 +137,42 @@ def worker():
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Solo para el plugin del Stream Deck.
+
+    Una web abierta en el navegador que intente leerla manda siempre la cabecera Origin;
+    el plugin, no. Y Host tiene que ser esta dirección: así tampoco sirve hacer que un
+    dominio apunte a 127.0.0.1 (DNS rebinding), donde el navegador ya no mandaría Origin.
+
+    Con ?since=N espera a que el estado deje de ser la versión N, hasta WAIT segundos.
+    El Stream Deck frena los temporizadores del plugin a uno por minuto cuando lleva un
+    rato en segundo plano, pero no las respuestas de red: así se entera al momento.
+    """
+
+    WAIT = 25
+    rejected = set()  # Para avisar en el registro una vez por origen, no en cada petición.
+
     def do_GET(self):
-        if self.path != "/battery.json":
+        host, origin = self.headers.get("Host"), self.headers.get("Origin")
+        if host != f"127.0.0.1:{PORT}" or origin is not None:
+            if (host, origin) not in self.rejected:
+                self.rejected.add((host, origin))
+                log.warning("API: rechazada una petición de Host %s, Origin %s", host, origin)
+            self.send_error(403)
+            return
+        path, _, query = self.path.partition("?")
+        if path != "/battery.json":
             self.send_error(404)
             return
-        with lock:
-            body = json.dumps(state, ensure_ascii=False).encode()
+        if query.startswith("since="):
+            since = query[len("since="):]
+            with changes:
+                changes.wait_for(lambda: str(version) != since, timeout=self.WAIT)
+                current = version
+            with lock:
+                body = json.dumps({"version": current, "devices": state}, ensure_ascii=False).encode()
+        else:  # Plugins anteriores a la 2.4.0.
+            with lock:
+                body = json.dumps(state, ensure_ascii=False).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")

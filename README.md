@@ -15,7 +15,7 @@ Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dis
   - *General:* API del Stream Deck, aviso de batería baja y actualizaciones. Los cambios se aplican solos.
 - **Colores:** cada dispositivo usa color fijo o según nivel (verde desde 30 %, ámbar desde 15 %, rojo por debajo). Con color fijo, por debajo del aviso el número pasa a blanco sobre rojo.
 - **Stream Deck:** acción «Batería» en la categoría «Litio», con un desplegable para elegir dispositivo. El anillo marca el nivel, el rayo sustituye al icono mientras carga y el gris indica el último dato. Las teclas por dispositivo de la versión 1 siguen funcionando, aunque esas acciones ya no salen en la lista.
-- **API local:** `http://127.0.0.1:47631/battery.json`, solo en este PC. Existe para el Stream Deck y se puede desactivar; sin ella las teclas muestran `--`.
+- **API local:** `http://127.0.0.1:47631/battery.json`, solo en este PC y solo para el Stream Deck: rechaza a las webs abiertas en el navegador. Se puede desactivar; sin ella las teclas muestran `--`.
 - **Datos:** `%LOCALAPPDATA%\battery-tray` (`settings.json`, `state.json` y `battery-tray.log`). Desinstalar los conserva.
 - **Nombre:** hasta la 2.1.0 se llamaba «Batería». La 2.2.0 se mueve sola a `Programs\Litio` y borra la carpeta y el menú antiguos. Los nombres internos (carpeta de datos, mutex, clave de arranque y UUID del plugin) siguen igual, para que las versiones viejas se actualicen encima y las teclas del Stream Deck no se pierdan.
 
@@ -66,6 +66,8 @@ Si el aparato usa otro esquema, como los informes `feature` de Razer, hace falta
 - **Iconos ocultos:** Windows mete en el desplegable «^» los iconos de un ejecutable nuevo. `promote_tray` pone `IsPromoted` en su entrada de `NotifyIconSettings` solo si no existe, para respetar lo que elija el usuario después. La entrada es por ejecutable, no por icono.
 - **pystray:** `TrayIcon` dibuja al tamaño real de la bandeja y evita reutilizar la imagen de antes de esconderse. Toca métodos internos, así que la versión va fijada.
 - **Una sola instancia:** la garantiza un mutex con nombre, no el puerto, porque la API se puede apagar. El instalador usa los mismos nombres en `AppMutex`.
+- **API solo para el Stream Deck:** una web que intenta leerla manda siempre la cabecera `Origin` y el plugin no, así que se rechaza toda petición que la lleve. También se exige `Host: 127.0.0.1:47631`, porque si un dominio apunta a 127.0.0.1 (DNS rebinding) el navegador ya no manda `Origin`. Cada combinación rechazada se apunta una vez en el registro.
+- **Teclas al momento:** el Stream Deck frena los temporizadores del plugin a uno por minuto cuando lleva un rato en segundo plano, así que preguntar cada segundo no funciona. El plugin pide `battery.json?since=N` y el programa no contesta hasta que el estado cambia o pasan 25 s; al llegar la respuesta, el plugin lanza la siguiente. Las respuestas de red no se frenan.
 - **Actualizar sin carreras:** solo el programa de fondo busca e instala; la ventana lo lee de `update.json` y le pide cosas con `update-request`. El programa lanza el instalador y se cierra. Al ver `/update=1`, el instalador espera a que se suelten los mutex antes de su comprobación de `AppMutex`, que en silencio abortaría. Luego lo reabre a través del Explorador, para que no herede las variables de PyInstaller del proceso viejo.
 
 ## Desarrollo

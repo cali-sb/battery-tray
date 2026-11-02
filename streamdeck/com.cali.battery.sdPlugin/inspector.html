@@ -14,29 +14,38 @@
 <label>Dispositivo <select id="device"></select></label>
 <p id="hint" hidden>Sin datos: abre Litio y activa el Stream Deck en Ajustes, General.</p>
 <script>
-const URL_ESTADO = "http://127.0.0.1:47631/battery.json";
+// La lista se pide al plugin por el Stream Deck, no a la API: la API rechaza las peticiones
+// con cabecera Origin, y esta página la manda.
 const select = document.getElementById("device");
 
-async function fill(chosen) {
-  let data = {};
-  try {
-    data = await (await fetch(URL_ESTADO, { cache: "no-store" })).json();
-  } catch (e) {
-    document.getElementById("hint").hidden = false;
-  }
+function fill(data, chosen) {
+  document.getElementById("hint").hidden = data !== null;
+  data = data || {};
   select.replaceChildren(new Option("Elegir…", ""));
   for (const [key, device] of Object.entries(data)) select.add(new Option(device.name, key));
   if (chosen && !(chosen in data)) select.add(new Option(chosen, chosen));
   select.value = chosen || "";
 }
 
-function connectElgatoStreamDeckPropertyInspector(port, uuid, registerEvent, info, actionInfo) {
+// El Stream Deck llama a esta función por su nombre, el mismo que en el plugin.
+function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
+  const { action, payload } = JSON.parse(actionInfo);
+  let chosen = payload.settings.device;
   const socket = new WebSocket("ws://127.0.0.1:" + port);
-  socket.onopen = () => socket.send(JSON.stringify({ event: registerEvent, uuid }));
-  select.onchange = () => socket.send(JSON.stringify({
-    event: "setSettings", context: uuid, payload: { device: select.value }
-  }));
-  fill(JSON.parse(actionInfo).payload.settings.device);
+  const send = (message) => socket.send(JSON.stringify({ action, context: uuid, ...message }));
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ event: registerEvent, uuid }));
+    send({ event: "sendToPlugin", payload: { get: "devices" } });
+  };
+  socket.onmessage = (msg) => {
+    const m = JSON.parse(msg.data);
+    if (m.event === "sendToPropertyInspector" && "devices" in m.payload) fill(m.payload.devices, chosen);
+  };
+  select.onchange = () => {
+    chosen = select.value;
+    send({ event: "setSettings", payload: { device: chosen } });
+  };
+  fill({}, chosen);
 }
 </script>
 </body>

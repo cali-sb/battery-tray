@@ -26,31 +26,66 @@ function paint(context) {
   socket.send(JSON.stringify({ event: "setImage", context, payload: { image, target: 0 } }));
 }
 
-async function refresh() {
-  try {
-    data = await (await fetch(URL_ESTADO, { cache: "no-store" })).json();
-  } catch (e) {
-    data = null;
-  }
+function paintAll() {
   keys.forEach((_, context) => paint(context));
+}
+
+// El Stream Deck frena los temporizadores del plugin a uno por minuto cuando lleva un rato
+// en segundo plano. Por eso no se pregunta cada segundo: se deja una petición abierta que el
+// programa contesta en cuanto algo cambia (o a los 25 s), y al llegar se lanza la siguiente.
+async function listen() {
+  let version = "";
+  for (;;) {
+    try {
+      const response = await fetch(URL_ESTADO + "?since=" + version, { cache: "no-store" });
+      if (response.status === 404) return poll(); // Programa anterior a la 2.4.0.
+      if (!response.ok) throw new Error(response.status);
+      const reply = await response.json();
+      version = reply.version;
+      data = reply.devices;
+    } catch (e) {
+      data = null;
+      version = "";
+      paintAll();
+      await new Promise((done) => setTimeout(done, 2000)); // Programa cerrado o API apagada.
+      continue;
+    }
+    paintAll();
+  }
+}
+
+function poll() {
+  const refresh = async () => {
+    try {
+      data = await (await fetch(URL_ESTADO, { cache: "no-store" })).json();
+    } catch (e) {
+      data = null;
+    }
+    paintAll();
+  };
+  refresh();
+  setInterval(refresh, 1000);
 }
 
 function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
   socket = new WebSocket("ws://127.0.0.1:" + port);
   socket.onopen = () => socket.send(JSON.stringify({ event: registerEvent, uuid }));
   socket.onmessage = (msg) => {
-    const m = JSON.parse(msg.data);
-    if (m.event === "willAppear" || m.event === "didReceiveSettings") {
+    const m = JSON.parse(msg.data);    if (m.event === "willAppear" || m.event === "didReceiveSettings") {
       keys.set(m.context, deviceOf(m.action, m.payload.settings));
       painted.delete(m.context); // Al volver a la página la tecla llega vacía.
       paint(m.context);
-      refresh();
     } else if (m.event === "willDisappear") {
       keys.delete(m.context);
       painted.delete(m.context);
+    } else if (m.event === "sendToPlugin" && m.payload.get === "devices") {
+      // El panel de ajustes de la tecla no puede leer la API: se le pasa lo que ya hay aquí.
+      socket.send(JSON.stringify({
+        event: "sendToPropertyInspector", action: m.action, context: m.context, payload: { devices: data }
+      }));
     }
   };
-  setInterval(refresh, 1000); // Pregunta en local al programa, que ya tiene el dato: no cuesta nada.
+  listen();
 }
 </script>
 </body>
