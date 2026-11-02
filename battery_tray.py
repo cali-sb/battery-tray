@@ -99,7 +99,7 @@ def idle_ms():
 
 
 def worker():
-    readers, due = {}, {}
+    readers, due, answered = {}, {}, {}
     while True:
         now = time.monotonic()
         with lock:
@@ -116,12 +116,17 @@ def worker():
                 # Mientras carga o no contesta se repite antes, para notar que vuelve a gastar.
                 pause = reader.interval if reading and not reading[1] else reader.retry
                 due[key] = now + pause
+                if reading:
+                    answered[key] = now
+                elif now - answered.get(key, -reader.grace) < reader.grace:
+                    continue  # Se ha dormido hace poco: se deja como estaba.
                 update(key, *(reading or (None, False)), online=reading is not None)
             except Exception:
                 due[key] = now + 60
                 log.exception("fallo al leer %s", key)
         for key in set(readers) - {d["id"] for d in devices}:
             del readers[key]
+            answered.pop(key, None)
         time.sleep(0.5)
 
 

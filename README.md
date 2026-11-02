@@ -24,7 +24,7 @@ Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dis
 | Tipo | Cómo se lee | Cada cuánto | Notas |
 |---|---|---|---|
 | Bluetooth estándar | Propiedad de batería de Windows | 5 s | Sirve cualquier aparato que publique el servicio de batería BLE. La precisión es la que dé cada uno: los mandos Xbox dan el porcentaje de 1 en 1 (se han visto 88 y 83), y `0x2A19` leído directamente coincide |
-| Ratones Logitech con receptor LIGHTSPEED | HID++ 2.0, funciones `0x1004` o `0x1000` | 10 s con actividad en el PC; si no contesta o carga, cada 5 s | Solo contestan mientras se usan: dormido cuenta como apagado. Probado con PRO X 2 y receptor `C54D`; el resto de receptores y `0x1000` están sin probar |
+| Ratones Logitech con receptor LIGHTSPEED | HID++ 2.0, funciones `0x1004` o `0x1000` | 10 s con actividad en el PC; si no contesta o carga, cada 5 s | Solo se pregunta con actividad en el PC. Dormido tarda hasta 1,5 s en contestar, así que se espera 2 s, y solo se da por apagado tras 2 minutos sin respuesta. Probado con PRO X 2 y receptor `C54D`; el resto de receptores y `0x1000` están sin probar |
 | DualSense y DualSense Edge | Informe HID `0x31` (Bluetooth) o `0x01` (USB) | 5 s | Tramos de 10 %: el mando no da más precisión. Muestra el punto medio (85 es de 80 a 89). Probado con DualSense; Edge sin probar |
 | Modelos de `protocols.json` | Consultas HID declaradas en el archivo | 5 s | HyperX Cloud Alpha Wireless probado; Alpha 2 Wireless sin probar. Porcentaje real |
 

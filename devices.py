@@ -111,6 +111,7 @@ class BluetoothReader:
 
     interval = retry = 5
     needs_activity = False
+    grace = 0  # Segundos sin respuesta antes de darlo por apagado.
 
     def __init__(self, device):
         self.mac = device["ref"]
@@ -128,6 +129,9 @@ class LogitechReader:
 
     interval, retry = 10, 5
     needs_activity = True
+    # Si aun así se pierde alguna respuesta, no desaparece de la bandeja: solo
+    # se da por apagado tras 2 minutos sin contestar.
+    grace = 120
     DEVICE = 1
     FEATURES = ((0x1004, 1, 2), (0x1000, 0, 2))  # (función, consulta, byte de estado)
 
@@ -136,7 +140,9 @@ class LogitechReader:
         self.feature = None
         self.sw = 0
 
-    def _call(self, dev, idx, fn, params=b"", timeout=0.7):
+    def _call(self, dev, idx, fn, params=b"", timeout=2.0):
+        # Despierto contesta en menos de 10 ms; dormido, el receptor tarda en
+        # despertarlo y se han medido hasta 1,5 s.
         # Cada petición lleva su propio id: una respuesta atrasada de otra
         # petición llegó a leerse como batería (7 % en vez de 57 %).
         self.sw = self.sw % 15 + 1
@@ -187,6 +193,7 @@ class LogitechReader:
 class DualsenseReader:
     interval = retry = 5
     needs_activity = False
+    grace = 0
 
     def __init__(self, device=None):
         pass
@@ -246,6 +253,7 @@ class ProtocolReader:
 
     interval = retry = 5
     needs_activity = False
+    grace = 0
 
     def __init__(self, device):
         self.model = load_protocols()[device["ref"]]
