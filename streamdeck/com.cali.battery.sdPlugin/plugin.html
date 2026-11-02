@@ -6,8 +6,14 @@
 <script src="key.js"></script>
 <script>
 const URL_ESTADO = "http://127.0.0.1:47631/battery.json";
+const GENERIC_ACTION = "device"; // Esta acción elige dispositivo; las antiguas lo llevan en el UUID.
 const keys = new Map(); // contexto -> dispositivo
 let socket, data = null;
+
+function deviceOf(action, settings) {
+  const name = action.split(".").pop();
+  return name === GENERIC_ACTION ? (settings && settings.device) || "" : name;
+}
 
 function paint(context) {
   const key = keys.get(context);
@@ -29,8 +35,8 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
   socket.onopen = () => socket.send(JSON.stringify({ event: registerEvent, uuid }));
   socket.onmessage = (msg) => {
     const m = JSON.parse(msg.data);
-    if (m.event === "willAppear") {
-      keys.set(m.context, m.action.split(".").pop());
+    if (m.event === "willAppear" || m.event === "didReceiveSettings") {
+      keys.set(m.context, deviceOf(m.action, m.payload.settings));
       paint(m.context);
       refresh();
     } else if (m.event === "willDisappear") {

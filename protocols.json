@@ -1,0 +1,27 @@
+{
+  "hyperx_cloud_alpha_wireless": {
+    "name": "HyperX Cloud Alpha Wireless",
+    "kind": "headset",
+    "tested": true,
+    "vid": "03F0",
+    "pids": ["098D"],
+    "usage_page": "FF43",
+    "size": 31,
+    "online": { "send": "21 BB 03", "reply": "21 BB 03", "byte": 3, "off": [1] },
+    "charging": { "send": "21 BB 0C", "reply": "21 BB 0C", "byte": 3, "on": [1] },
+    "level": { "send": "21 BB 0B", "reply": "21 BB 0B", "byte": 3 }
+  },
+  "hyperx_cloud_alpha_2_wireless": {
+    "name": "HyperX Cloud Alpha 2 Wireless",
+    "kind": "headset",
+    "tested": false,
+    "vid": "03F0",
+    "pids": ["08BE"],
+    "usage_page": "FF13",
+    "size": 64,
+    "level_while_charging": true,
+    "online": { "send": "52 01", "reply": "53 01", "byte": 2, "off": [0] },
+    "charging": { "send": "50 02", "reply": "51 02", "byte": 3, "on": [1] },
+    "level": { "send": "50 02", "reply": "51 02", "byte": 2 }
+  }
+}

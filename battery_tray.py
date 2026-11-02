@@ -1,54 +1,48 @@
-"""Batería del ratón, los mandos y el teclado en la bandeja de Windows.
+"""Programa de fondo: lee la batería y la muestra en la bandeja de Windows.
 
-Fuentes (todas de solo lectura, salvo el aviso del DualSense en el README):
-- PRO X 2: HID++ 2.0 por el receptor LIGHTSPEED. Solo contesta mientras se usa.
-- Xbox y Ducky: propiedad de batería de Bluetooth que ya mantiene Windows.
-- DualSense: informe de entrada HID.
+Qué dispositivos lee, cómo se ven y si publica la API para el Stream Deck sale de
+settings.json, que edita la ventana de ajustes (settings_app.py, con --settings). La ventana va
+en un proceso aparte para no cargar Qt en lo que corre siempre.
 
-Publica el estado en http://127.0.0.1:47631/battery.json para el Stream Deck.
+La API, si está activa, es http://127.0.0.1:47631/battery.json.
 """
 import ctypes
 import json
 import logging
 import logging.handlers
-import os
+import subprocess
+import sys
 import threading
 import time
-import uuid
+import winreg
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import hid
 import pystray
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
+from pystray._util import serialized_image, win32
+
+import config
+from devices import READERS
 
 PORT = 47631
-BT_INTERVAL = 30
-DUALSENSE_INTERVAL = 60
-MOUSE_INTERVAL = 300
-MOUSE_RETRY = 20
+SM_CXSMICON = 49
+IDLE = "general"  # Icono que lleva el menú cuando no hay ningún dispositivo que mostrar.
+LOW_FILL = (225, 40, 40, 255)
+LOW_TEXT = (255, 255, 255, 255)
 
-LOGI_VID, LOGI_PID = 0x046D, 0xC54D
-SONY_VID, SONY_PIDS = 0x054C, (0x0CE6, 0x0DF2)
-BT_DEVICES = {
-    "AABBCCDDEE01": ("xbox", "Xbox"),
-    "AABBCCDDEE02": ("xbox_elite", "Xbox Elite"),
-    "AABBCCDDEE03": ("teclado", "Teclado"),
-}
-ORDER = ["raton", "dualsense", "xbox", "xbox_elite", "teclado"]
-NAMES = {"raton": "Ratón", "dualsense": "DualSense"}
-
-DATA_DIR = Path(os.environ["LOCALAPPDATA"]) / "battery-tray"
-STATE_FILE = DATA_DIR / "state.json"
 log = logging.getLogger("battery-tray")
 lock = threading.Lock()
 state = {}
+settings = config.load()
+quit_event = threading.Event()
+api_server = None
 
 
 def load_state():
     try:
-        saved = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        saved = json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
     for value in saved.values():
@@ -56,20 +50,38 @@ def load_state():
     state.update(saved)
 
 
-def update(key, name, level=None, charging=False, online=True):
+def write_state():
+    with lock:
+        snapshot = json.dumps(state, ensure_ascii=False)
+    tmp = config.STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(snapshot, encoding="utf-8")
+    tmp.replace(config.STATE_FILE)
+
+
+def sync_state():
+    """Ajusta el estado a la lista de dispositivos, que puede haber cambiado."""
+    with lock:
+        wanted = {d["id"]: d for d in settings["devices"]}
+        for key in [k for k in state if k not in wanted]:
+            del state[key]
+        for key, device in wanted.items():
+            entry = state.setdefault(key, {"level": None, "charging": False, "online": False,
+                                           "updated": None})
+            entry.update(name=device["name"], kind=device.get("kind", "other"))
+
+
+def update(key, level=None, charging=False, online=True):
     """Guarda una lectura; sin nivel nuevo conserva el último conocido."""
     with lock:
-        current = state.setdefault(key, {"name": name, "level": None, "charging": False,
-                                         "online": False, "updated": None})
+        current = state.get(key)
+        if current is None:  # Lo han quitado mientras se leía.
+            return
         current["online"] = online
         if level is not None:
             current.update(level=level, charging=charging, updated=int(time.time()))
         else:
-            current["charging"] = False
-        snapshot = json.dumps(state, ensure_ascii=False)
-    tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(snapshot, encoding="utf-8")
-    tmp.replace(STATE_FILE)
+            current["charging"] = charging
+    write_state()
 
 
 class LastInput(ctypes.Structure):
@@ -82,190 +94,30 @@ def idle_ms():
     return (ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF
 
 
-class HidppMouse:
-    """Lee la función 0x1004 (Unified Battery) del dispositivo 1 del receptor."""
-
-    DEVICE = 1
-    FEATURE = 0x1004
-
-    def __init__(self):
-        self.index = None
-        self.sw = 0
-
-    def _call(self, dev, idx, fn, params=b"", timeout=0.7):
-        # Cada petición lleva su propio id: una respuesta atrasada de otra
-        # petición llegó a leerse como batería (7 % en vez de 57 %).
-        self.sw = self.sw % 15 + 1
-        expected = (fn << 4) | self.sw
-        dev.write((bytes([0x11, self.DEVICE, idx, expected]) + params).ljust(20, b"\0"))
-        end = time.monotonic() + timeout
-        while time.monotonic() < end:
-            raw = dev.read(20)
-            if not raw:
-                time.sleep(0.003)
-                continue
-            r = bytes(raw)
-            if r[1] == self.DEVICE and r[2] == 0xFF and r[3] == idx and r[4] == expected:
-                return None
-            if r[1] == self.DEVICE and r[2] == idx and r[3] == expected:
-                return r[4:]
-        return None
-
-    def read(self):
-        """Devuelve (porcentaje, cargando) o None si el ratón no contesta."""
-        path = next((d["path"] for d in hid.enumerate(LOGI_VID, LOGI_PID)
-                     if d["usage_page"] == 0xFF00 and d["usage"] == 2), None)
-        if path is None:
-            return None
-        dev = hid.device()
-        dev.open_path(path)
-        try:
-            dev.set_nonblocking(True)
-            if self.index is None:
-                reply = self._call(dev, 0, 0, self.FEATURE.to_bytes(2, "big"))
-                if not reply or reply[0] == 0:
-                    return None
-                self.index = reply[0]
-            reply = self._call(dev, self.index, 1)
-            if not reply or not 0 <= reply[0] <= 100:
-                self.index = None
-                return None
-            return reply[0], reply[2] in (1, 2, 3, 4)
-        finally:
-            dev.close()
-
-
-class DevPropKey(ctypes.Structure):
-    _fields_ = [("fmtid", ctypes.c_byte * 16), ("pid", wintypes.ULONG)]
-
-
-def propkey(guid, pid):
-    key = DevPropKey()
-    key.fmtid[:] = list(int.from_bytes(bytes([b]), "little", signed=True)
-                        for b in uuid.UUID(guid).bytes_le)
-    key.pid = pid
-    return key
-
-
-KEY_CONNECTED = propkey("83DA6326-97A6-4088-9453-A1923F573B29", 15)
-KEY_BATTERY = propkey("104EA319-6EE2-4701-BD47-8DDBF425BBE5", 2)
-CM_FILTER_ENUMERATOR, CM_FILTER_PRESENT = 0x1, 0x100
-cfgmgr = ctypes.windll.cfgmgr32
-
-
-def device_ids(enumerator):
-    flags = CM_FILTER_ENUMERATOR | CM_FILTER_PRESENT
-    size = wintypes.ULONG()
-    if cfgmgr.CM_Get_Device_ID_List_SizeW(ctypes.byref(size), enumerator, flags):
-        return []
-    buffer = ctypes.create_unicode_buffer(size.value)
-    if cfgmgr.CM_Get_Device_ID_ListW(enumerator, buffer, size, flags):
-        return []
-    return [item for item in buffer[:].split("\0") if item]
-
-
-def get_property(devinst, key):
-    prop_type, data = wintypes.ULONG(), (ctypes.c_ubyte * 8)()
-    size = wintypes.ULONG(ctypes.sizeof(data))
-    if cfgmgr.CM_Get_DevNode_PropertyW(devinst, ctypes.byref(key), ctypes.byref(prop_type),
-                                       data, ctypes.byref(size), 0):
-        return None
-    return data[0]
-
-
-def read_bluetooth():
-    for enumerator in ("BTHLE", "BTHENUM"):
-        for instance in device_ids(enumerator):
-            upper = instance.upper()
-            if "\\DEV_" not in upper:
-                continue
-            mac = upper.split("\\DEV_")[1][:12]
-            if mac not in BT_DEVICES:
-                continue
-            devinst = wintypes.DWORD()
-            if cfgmgr.CM_Locate_DevNodeW(ctypes.byref(devinst), instance, 0):
-                continue
-            key, name = BT_DEVICES[mac]
-            online = bool(get_property(devinst, KEY_CONNECTED))
-            update(key, name, get_property(devinst, KEY_BATTERY) if online else None, False, online)
-
-
-def read_dualsense():
-    """Devuelve (porcentaje, cargando) o None si el mando está apagado.
-
-    Con el mando por USB, Windows sigue listando su interfaz Bluetooth, que ya
-    no envía nada: hay que probarlas todas, no quedarse con la primera.
-    """
-    interfaces = [d for d in hid.enumerate(SONY_VID) if d["product_id"] in SONY_PIDS]
-    interfaces.sort(key=lambda d: d.get("bus_type") != 1)  # USB primero.
-    for interface in interfaces:
-        reading = read_dualsense_interface(interface["path"])
-        if reading:
-            return reading
-    return None
-
-
-def read_dualsense_interface(path):
-    dev = hid.device()
-    try:
-        dev.open_path(path)
-    except OSError:
-        return None
-    try:
-        asked = False
-        empty = 0
-        for _ in range(20):
-            r = dev.read(100, 150)
-            if not r:
-                empty += 1
-                if empty >= 3:
-                    return None
-                continue
-            if r[0] == 0x31 and len(r) >= 78:
-                status = r[54]
-            elif r[0] == 0x01 and len(r) >= 64:
-                status = r[53]
-            elif r[0] == 0x01 and not asked:
-                # En Bluetooth arranca en modo reducido, sin batería: pedir la
-                # calibración lo pasa al informe completo 0x31.
-                dev.get_feature_report(0x05, 41)
-                asked = True
-                continue
-            else:
-                continue
-            charge, mode = status & 0x0F, status >> 4
-            if mode == 2:
-                return 100, True
-            if mode in (0, 1) and charge <= 10:
-                return min(charge * 10 + 5, 100), mode == 1
-        return None
-    finally:
-        dev.close()
-
-
 def worker():
-    mouse = HidppMouse()
-    next_mouse = next_bt = next_ds = 0.0
+    readers, due = {}, {}
     while True:
         now = time.monotonic()
-        try:
-            if now >= next_bt:
-                next_bt = now + BT_INTERVAL
-                read_bluetooth()
-            if now >= next_ds:
-                next_ds = now + DUALSENSE_INTERVAL
-                reading = read_dualsense()
-                update("dualsense", NAMES["dualsense"], *(reading or (None, False)),
-                       online=reading is not None)
-            if now >= next_mouse and idle_ms() < 1500:
-                reading = mouse.read()
-                next_mouse = now + (MOUSE_INTERVAL if reading else MOUSE_RETRY)
-                if reading:
-                    update("raton", NAMES["raton"], *reading)
-                elif "raton" not in state:
-                    update("raton", NAMES["raton"], online=False)
-        except Exception:
-            log.exception("fallo al leer")
+        with lock:
+            devices = list(settings["devices"])
+        for device in devices:
+            key = device["id"]
+            try:
+                if key not in readers:
+                    readers[key] = READERS[device["driver"]](device)
+                reader = readers[key]
+                if now < due.get(key, 0) or (reader.needs_activity and idle_ms() >= 1500):
+                    continue
+                reading = reader.read()
+                # Mientras carga o no contesta se repite antes, para notar que vuelve a gastar.
+                pause = reader.interval if reading and not reading[1] else reader.retry
+                due[key] = now + pause
+                update(key, *(reading or (None, False)), online=reading is not None)
+            except Exception:
+                due[key] = now + 60
+                log.exception("fallo al leer %s", key)
+        for key in set(readers) - {d["id"] for d in devices}:
+            del readers[key]
         time.sleep(0.5)
 
 
@@ -287,6 +139,22 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def set_api(enabled):
+    """Enciende o apaga la API que usa el plugin del Stream Deck."""
+    global api_server
+    if enabled and api_server is None:
+        try:
+            api_server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        except OSError:
+            log.warning("el puerto %s está ocupado: el Stream Deck no recibirá datos", PORT)
+            return
+        threading.Thread(target=api_server.serve_forever, daemon=True).start()
+    elif not enabled and api_server is not None:
+        api_server.shutdown()
+        api_server.server_close()
+        api_server = None
+
+
 def colour(level):
     if level is None:
         return (150, 150, 150, 255)
@@ -295,68 +163,279 @@ def colour(level):
     return (245, 170, 40, 255) if level >= 15 else (240, 70, 60, 255)
 
 
-def tray_image(level):
-    image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+def light_taskbar():
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion"
+                            r"\Themes\Personalize") as key:
+            return winreg.QueryValueEx(key, "SystemUsesLightTheme")[0] == 1
+    except OSError:
+        return False
+
+
+def glyph(kind, size, ink):
+    """Dibuja el dispositivo en una rejilla de 24 x 12, a 8 aumentos para suavizarlo."""
+    u = size * 8 / 24
+    image = Image.new("RGBA", (size * 8, size * 4), (0, 0, 0, 0))
+    d = ImageDraw.Draw(image)
+    clear = (0, 0, 0, 0)
+
+    def box(*values):
+        return [v * u for v in values]
+
+    if kind == "mouse":
+        d.rounded_rectangle(box(7, 0, 17, 12), radius=4.8 * u, fill=ink)
+        d.rectangle(box(11, 2, 13, 5.5), fill=clear)
+    elif kind == "headset":
+        d.arc(box(3.5, 0, 20.5, 17), 180, 360, fill=ink, width=round(2.4 * u))
+        d.rounded_rectangle(box(2, 6.5, 8, 12), radius=1.5 * u, fill=ink)
+        d.rounded_rectangle(box(16, 6.5, 22, 12), radius=1.5 * u, fill=ink)
+    elif kind == "keyboard":
+        d.rounded_rectangle(box(0.5, 0.5, 23.5, 11.5), radius=2 * u, fill=ink)
+        for x in (3, 7.5, 11.1, 14.7, 19.2):
+            d.rectangle(box(x, 3, x + 1.8, 4.8), fill=clear)
+        d.rectangle(box(6, 7.5, 18, 9), fill=clear)
+    elif kind == "gamepad":
+        d.rounded_rectangle(box(4, 0.5, 20, 8.5), radius=3.5 * u, fill=ink)
+        for top, bottom in (((6, 4), (3.8, 9.8)), ((18, 4), (20.2, 9.8))):
+            d.line(box(*top, *bottom), fill=ink, width=round(4.2 * u))
+            d.ellipse(box(bottom[0] - 2.1, bottom[1] - 2.1, bottom[0] + 2.1, bottom[1] + 2.1), fill=ink)
+        d.rectangle(box(6, 3.7, 9.6, 5.3), fill=clear)
+        d.rectangle(box(7, 2.7, 8.6, 6.3), fill=clear)
+        d.ellipse(box(14.2, 2.8, 16.6, 5.2), fill=clear)
+        d.ellipse(box(17, 4.4, 19.4, 6.8), fill=clear)
+    else:
+        d.rounded_rectangle(box(3, 1.5, 19.5, 10.5), radius=2 * u, outline=ink, width=round(1.8 * u))
+        d.rectangle(box(20.2, 4, 21.8, 8), fill=ink)
+    return image.resize((size, size // 2), Image.LANCZOS)
+
+
+def neutral_ink(light):
+    return (40, 40, 45, 255) if light else (235, 235, 240, 255)
+
+
+def idle_image(size, light):
+    """Pila vacía para el icono que solo sale si no hay dispositivos que mostrar."""
+    s = size * 8
+    image = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(image)
+    d.rounded_rectangle((s * 0.06, s * 0.28, s * 0.82, s * 0.72), radius=s // 12,
+                        outline=neutral_ink(light), width=s // 11)
+    d.rectangle((s * 0.86, s * 0.42, s * 0.95, s * 0.58), fill=neutral_ink(light))
+    return image.resize((size, size), Image.LANCZOS)
+
+
+def device_colour(device):
+    try:
+        return ImageColor.getcolor(device.get("color", ""), "RGBA")
+    except ValueError:
+        return None
+
+
+def tray_image(device, level, size, light, low_level):
+    """Icono de un dispositivo: su dibujo arriba y el número debajo.
+
+    Con color fijo el color no avisa de nada, así que por debajo de `low_level`
+    el número va sobre un fondo rojo.
+    """
+    fixed = device_colour(device) if device.get("color_mode") == "fixed" else None
+    tinted = device_colour(device) if device.get("tint_glyph") else None
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    image.alpha_composite(glyph(device.get("kind", "other"), size, tinted or neutral_ink(light)))
     draw = ImageDraw.Draw(image)
-    text = "?" if level is None else str(level)
-    font = ImageFont.truetype("arialbd.ttf", 30 if len(text) > 2 else 46)
-    box = draw.textbbox((0, 0), text, font=font)
-    draw.text(((64 - box[2] - box[0]) / 2, (64 - box[3] - box[1]) / 2), text,
-              font=font, fill=colour(level))
+    text = "--" if level is None else str(level)
+    points = round(size * 0.66)
+    while draw.textlength(text, font=ImageFont.truetype("arialbd.ttf", points)) > size:
+        points -= 1
+    font = ImageFont.truetype("arialbd.ttf", points)
+    if fixed and level is not None and level < low_level:
+        draw.rounded_rectangle((0, size // 2, size - 1, size - 1), radius=size // 8, fill=LOW_FILL)
+        fixed = LOW_TEXT
+    draw.text((size / 2, size - (1 if fixed == LOW_TEXT else 0)), text, font=font, anchor="ms",
+              fill=fixed or colour(level))
     return image
 
 
-def sorted_devices():
+class TrayIcon(pystray.Icon):
+    """Icono dibujado al tamaño real de la bandeja.
+
+    pystray lo carga al tamaño grande del sistema, que se ve borroso al reducirse. Esto
+    toca métodos internos de pystray: por eso su versión está fijada en requirements.txt.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.closing = threading.Event()
+
+    def _show(self):
+        self._release_icon()  # pystray reutilizaría la imagen de antes de esconderse.
+        super()._show()
+
+    def _assert_icon_handle(self):
+        if self._icon_handle:
+            return
+        size = self.icon.width
+        with serialized_image(self.icon.copy(), "ICO") as path:
+            self._icon_handle = win32.LoadImage(None, path, win32.IMAGE_ICON, size, size,
+                                                win32.LR_LOADFROMFILE)
+
+
+def snapshot():
+    """Devuelve la lista de (ajustes, estado) y el aviso de batería baja."""
     with lock:
-        return [dict(state[key]) for key in ORDER if key in state]
+        pairs = [(dict(d), dict(state[d["id"]])) for d in settings["devices"] if d["id"] in state]
+        return pairs, settings["low_level"]
 
 
-def line(device):
-    if device["level"] is None:
-        return f"{device['name']}: sin datos"
-    bolt = " (cargando)" if device["charging"] else ""
-    off = "" if device["online"] else " (último dato)"
-    return f"{device['name']}: {device['level']} %{bolt}{off}"
+def line(status):
+    if status["level"] is None:
+        return f"{status['name']}: sin datos"
+    bolt = " (cargando)" if status["charging"] else ""
+    off = "" if status["online"] else " (último dato)"
+    return f"{status['name']}: {status['level']} %{bolt}{off}"
 
 
-def tray_loop(icon):
-    icon.visible = True
+def tray_loop(icon, key, size, light):
+    """Muestra el icono solo si el dispositivo está elegido y gastando batería."""
     shown = None
-    while True:
-        devices = sorted_devices()
-        online = [d["level"] for d in devices if d["online"] and d["level"] is not None]
-        lowest = min(online) if online else None
-        lines = [line(d) for d in devices if d["online"] or d["name"] == "Ratón"]
-        current = (lowest, tuple(lines))
+    while not icon.closing.is_set():
+        pairs, low_level = snapshot()
+        active = frozenset(d["id"] for d, s in pairs
+                           if d.get("tray", True) and s["online"] and not s["charging"])
+        mine = next(((d, s) for d, s in pairs if d["id"] == key), None)
+        current = (active, low_level, json.dumps(mine, sort_keys=True, default=str) if mine else "",
+                   tuple(line(s) + str(d.get("tray", True)) for d, s in pairs))
         if current != shown:
             shown = current
-            icon.icon = tray_image(lowest)
-            icon.title = ("\n".join(lines) or "Sin dispositivos")[:127]
+            if mine:
+                icon.icon = tray_image(mine[0], mine[1]["level"], size, light, low_level)
+                icon.title = line(mine[1])[:127]
             icon.update_menu()
-        time.sleep(2)
+            icon.visible = key in active or (key == IDLE and not active)
+        icon.closing.wait(2)
+    icon.visible = False
+
+
+def toggle_tray(key):
+    saved = config.load()
+    for device in saved["devices"]:
+        if device["id"] == key:
+            device["tray"] = not device.get("tray", True)
+    config.save(saved)
+
+
+def open_settings(*_):
+    if getattr(sys, "frozen", False):
+        subprocess.Popen([sys.executable, "--settings"])
+    else:
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--settings"])
+
+
+def toggler(key):
+    return lambda icon, item: toggle_tray(key)
 
 
 def menu_items():
-    items = [pystray.MenuItem(line(d), None, enabled=False) for d in sorted_devices()]
-    return items + [pystray.Menu.SEPARATOR,
-                    pystray.MenuItem("Salir", lambda icon, _: icon.stop())]
+    pairs, _ = snapshot()
+    items = [pystray.MenuItem(line(s), toggler(d["id"]), checked=lambda item, on=d.get("tray", True): on)
+             for d, s in pairs]
+    return [*items, pystray.Menu.SEPARATOR, pystray.MenuItem("Ajustes…", open_settings),
+            pystray.MenuItem("Salir", lambda icon, _: quit_event.set())]
 
 
-def main():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    handler = logging.handlers.RotatingFileHandler(DATA_DIR / "battery-tray.log",
+def start_icon(key, size, light):
+    icon = TrayIcon(f"battery-tray-{key}", idle_image(size, light),
+                    "Batería: ningún dispositivo en uso", pystray.Menu(menu_items))
+    loop = threading.Thread(target=tray_loop, args=(icon, key, size, light), daemon=True)
+    thread = threading.Thread(target=icon.run, args=(lambda i: loop.start(),))
+    thread.start()
+    return icon, thread
+
+
+def stop_icon(icon, thread):
+    icon.closing.set()
+    time.sleep(0.05)
+    icon.stop()
+    thread.join(3)
+
+
+def apply_settings(icons, size, light):
+    """Aplica settings.json: iconos que entran o salen, y API encendida o apagada."""
+    global settings
+    fresh = config.load()
+    with lock:
+        settings = fresh
+    sync_state()
+    write_state()
+    set_api(fresh["streamdeck"])
+    wanted = {d["id"] for d in fresh["devices"]}
+    for key in [k for k in icons if k != IDLE and k not in wanted]:
+        stop_icon(*icons.pop(key))
+    for key in wanted - icons.keys():
+        icons[key] = start_icon(key, size, light)
+
+
+def promote_tray():
+    """Saca los iconos del desplegable «^», donde Windows mete los de un programa nuevo.
+
+    Windows guarda una entrada por ejecutable. Solo se marca si nadie la ha tocado: si el
+    usuario lo ocultó, IsPromoted ya existe y se respeta. Devuelve True si ya está resuelto.
+    """
+    tails = {tuple(part.lower() for part in Path(exe).parts[-2:])
+             for exe in (sys.executable, getattr(sys, "_base_executable", sys.executable))}
+    done = False
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\NotifyIconSettings") as parent:
+        for index in range(winreg.QueryInfoKey(parent)[0]):
+            name = winreg.EnumKey(parent, index)
+            with winreg.OpenKey(parent, name, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as entry:
+                try:
+                    path = winreg.QueryValueEx(entry, "ExecutablePath")[0]
+                except OSError:
+                    continue
+                # La ruta puede empezar por un GUID de carpeta conocida: se compara el final.
+                if tuple(part.lower() for part in Path(path).parts[-2:]) not in tails:
+                    continue
+                done = True
+                try:
+                    winreg.QueryValueEx(entry, "IsPromoted")
+                except OSError:
+                    winreg.SetValueEx(entry, "IsPromoted", 0, winreg.REG_DWORD, 1)
+    return done
+
+
+def run():
+    if not config.single_instance(config.TRAY_MUTEX):
+        return
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(config.DATA_DIR / "battery-tray.log",
                                                    maxBytes=200_000, backupCount=1, encoding="utf-8")
     logging.basicConfig(level=logging.WARNING, handlers=[handler],
                         format="%(asctime)s %(levelname)s %(message)s")
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # Sin esto, Windows reescala los iconos.
     load_state()
-    try:
-        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    except OSError:
-        return  # Ya hay otra instancia con el puerto.
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    size = ctypes.windll.user32.GetSystemMetrics(SM_CXSMICON)
+    light = light_taskbar()
+    icons = {IDLE: start_icon(IDLE, size, light)}
+    stamp = config.modified()
+    apply_settings(icons, size, light)
     threading.Thread(target=worker, daemon=True).start()
-    icon = pystray.Icon("battery-tray", tray_image(None), "Batería", pystray.Menu(menu_items))
-    icon.run(setup=lambda i: threading.Thread(target=tray_loop, args=(i,), daemon=True).start())
+    if not settings["devices"]:
+        open_settings()
+    promoted = False
+    while not quit_event.wait(1.5):
+        promoted = promoted or promote_tray()
+        if config.modified() != stamp:
+            stamp = config.modified()
+            apply_settings(icons, size, light)
+    for icon, thread in icons.values():
+        stop_icon(icon, thread)
+
+
+def main():
+    if "--settings" in sys.argv:
+        import settings_app
+        settings_app.main()
+    else:
+        run()
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
 hidapi
 pillow
-pystray
+pystray==0.19.5
+PySide6-Essentials

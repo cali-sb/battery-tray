@@ -1,65 +1,93 @@
-# battery-tray
+# Batería
 
-Batería del ratón, los mandos y el teclado en Windows: icono de bandeja y teclas del Stream Deck, sin G HUB ni programas de cada fabricante.
+Batería de ratones, cascos, mandos y teclados inalámbricos en Windows: iconos en la bandeja y teclas del Stream Deck, sin los programas de cada fabricante.
 
-Es un programa en Python (`battery_tray.py`) que lee los dispositivos y publica el estado en una API local, y un plugin de Stream Deck que lee esa API. Sin el programa en marcha, las teclas salen con `--`.
+Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dispositivos, una ventana de ajustes en Qt (`settings_app.py`) que solo se carga al abrirla y un plugin de Stream Deck opcional.
 
 ## Uso
 
-- **Bandeja:** el número es el dispositivo conectado con menos batería. Al pasar el ratón sale la lista; con clic derecho, también los desconectados y «Salir».
-- **Stream Deck:** categoría «Batería», una acción por dispositivo. El anillo marca el nivel, el rayo sustituye al icono mientras carga y el gris indica el último dato de un dispositivo desconectado.
-- **Colores:** verde desde 30 %, ámbar desde 15 %, rojo por debajo.
-- **API local:** `http://127.0.0.1:47631/battery.json`, solo en este PC.
-- **Estado y log:** `%LOCALAPPDATA%\battery-tray` (`state.json` y `battery-tray.log`).
+- **Instalar:** `Bateria-2.0.0-setup.exe`, sin permisos de administrador. El primer arranque abre los ajustes en la pestaña Buscar.
+- **Bandeja:** un icono por dispositivo, solo mientras gasta batería: apagado o cargando, desaparece. Si no queda ninguno sale una pila vacía, que solo sirve para abrir el menú. Con clic derecho, las casillas de la lista eligen qué dispositivos pueden mostrarse, y «Ajustes…» abre la ventana.
+- **Ajustes:**
+  - *Dispositivos:* nombre, tipo, colores y quitar.
+  - *Buscar:* lo que hay en el PC y si es compatible.
+  - *General:* API del Stream Deck y aviso de batería baja. Los cambios se aplican solos.
+- **Colores:** cada dispositivo usa color fijo o según nivel (verde desde 30 %, ámbar desde 15 %, rojo por debajo). Con color fijo, por debajo del aviso el número pasa a blanco sobre rojo.
+- **Stream Deck:** acción «Batería» en la categoría del mismo nombre, con un desplegable para elegir dispositivo. El anillo marca el nivel, el rayo sustituye al icono mientras carga y el gris indica el último dato. Las teclas por dispositivo de la versión 1 siguen funcionando, aunque esas acciones ya no salen en la lista.
+- **API local:** `http://127.0.0.1:47631/battery.json`, solo en este PC. Existe para el Stream Deck y se puede desactivar; sin ella las teclas muestran `--`.
+- **Datos:** `%LOCALAPPDATA%\battery-tray` (`settings.json`, `state.json` y `battery-tray.log`). Desinstalar los conserva.
 
-## Fuentes y refresco
+## Compatibilidad
 
-| Dispositivo | Cómo se lee | Cada cuánto | Notas |
+| Tipo | Cómo se lee | Cada cuánto | Notas |
 |---|---|---|---|
-| Ratón PRO X 2 | HID++ 2.0, función `0x1004`, por el receptor `046D:C54D` | 5 min, solo con actividad en el PC; si no contesta, reintenta a los 20 s | Solo contesta mientras se usa. Porcentaje real |
-| Xbox (`…0695`), Xbox Elite (`…54CF`), teclado Ducky | Propiedad de batería de Bluetooth de Windows | 30 s | El Xbox cambia de 5 en 5 aproximadamente: es lo que da el mando (Windows coincide con su `0x2A19` leído directamente). El Ducky solo se ve por Bluetooth, no por cable |
-| DualSense | Informe HID `0x31` (Bluetooth) o `0x01` (USB) | 60 s | Tramos de 10 %: el mando no da más precisión |
+| Bluetooth estándar | Propiedad de batería de Windows | 30 s | Sirve cualquier aparato que publique el servicio de batería BLE. La precisión es la que dé cada uno: los Xbox probados mostraron 95 y 90, y `0x2A19` leído directamente coincide |
+| Ratones Logitech con receptor LIGHTSPEED | HID++ 2.0, funciones `0x1004` o `0x1000` | 1 min con actividad en el PC; si no contesta o carga, cada 20 s | Solo contestan mientras se usan: dormido cuenta como apagado. Probado con PRO X 2 y receptor `C54D`; el resto de receptores y `0x1000` están sin probar |
+| DualSense y DualSense Edge | Informe HID `0x31` (Bluetooth) o `0x01` (USB) | 60 s | Tramos de 10 %: el mando no da más precisión. Muestra el punto medio (85 es de 80 a 89). Probado con DualSense; Edge sin probar |
+| Modelos de `protocols.json` | Consultas HID declaradas en el archivo | 60 s | HyperX Cloud Alpha Wireless probado; Alpha 2 Wireless sin probar. Porcentaje real |
 
-Las teclas piden el estado cada 15 s o al pulsarlas. Pulsar no fuerza una lectura nueva del dispositivo.
+La pestaña Buscar marca lo que no se ha probado. Solo se envían consultas a modelos identificados por VID:PID; a un aparato desconocido nunca se le manda nada.
 
-Los intervalos están al principio de `battery_tray.py`, y las MAC y los nombres, en `BT_DEVICES`.
+## Añadir un modelo
+
+Si el modelo responde a preguntas por HID, basta una entrada en `protocols.json`, sin tocar código:
+
+```json
+"mi_modelo": {
+  "name": "Nombre visible",
+  "kind": "headset",
+  "tested": false,
+  "vid": "03F0", "pids": ["098D"], "usage_page": "FF43", "size": 31,
+  "online":   { "send": "21 BB 03", "reply": "21 BB 03", "byte": 3, "off": [1] },
+  "charging": { "send": "21 BB 0C", "reply": "21 BB 0C", "byte": 3, "on": [1] },
+  "level":    { "send": "21 BB 0B", "reply": "21 BB 0B", "byte": 3 }
+}
+```
+
+- `send` son los bytes que se envían, y `reply`, cómo empieza la respuesta válida. `byte` es dónde está el dato.
+- `off` y `on` son los valores de apagado y de cargando.
+- `level_while_charging: true` si el nivel es fiable mientras carga.
+
+De dónde sacar el protocolo, de más fácil a más difícil:
+
+1. **Proyectos abiertos:** leer sus fuentes para copiar los bytes. [HeadsetControl](https://github.com/Sapd/HeadsetControl) (cascos de muchas marcas, ninguno Razer), [Solaar](https://github.com/pwr-Solaar/Solaar) (Logitech), [OpenRazer](https://github.com/openrazer/openrazer) (ratones y teclados Razer) y [rivalcfg](https://github.com/flozz/rivalcfg) (ratones SteelSeries). Conviene escribir el protocolo aquí en vez de incluir su código: HeadsetControl es GPL-3.
+2. **Capturar el tráfico:** con Wireshark y USBPcap, mientras el programa del fabricante muestra la batería. Se repite con niveles distintos y se busca el byte que cambia.
+3. **SDK del fabricante,** si lo ofrece. Obliga a tener instalado su programa, que es lo que este proyecto evita.
+
+Si el aparato usa otro esquema, como los informes `feature` de Razer, hace falta una clase en `devices.py` y su entrada en `READERS`. No hay que marcar `tested: true` hasta probarlo con el aparato delante.
 
 ## Cosas que no son evidentes
 
 - **HID++:** cada petición lleva su propio id y solo se acepta la respuesta con ese id. Sin eso, una respuesta atrasada de otra función se leyó como batería: el 7 de un falso «7 %» era la longitud del nombre «PRO X 2».
 - **DualSense por USB:** Windows sigue listando su interfaz Bluetooth, que ya no envía nada. Hay que probar todas las interfaces, USB primero; con la primera de la lista, el valor se queda congelado.
 - **DualSense por Bluetooth:** arranca en un modo reducido sin batería. Para leerla se pide el informe de calibración `0x05`, que lo pasa al modo completo hasta que se apague. Steam y los juegos con soporte nativo ya lo hacen, pero un juego antiguo que use el modo reducido podría ver mal los controles.
+- **Iconos ocultos:** Windows mete en el desplegable «^» los iconos de un ejecutable nuevo. `promote_tray` pone `IsPromoted` en su entrada de `NotifyIconSettings` solo si no existe, para respetar lo que elija el usuario después. La entrada es por ejecutable, no por icono.
+- **pystray:** `TrayIcon` dibuja al tamaño real de la bandeja y evita reutilizar la imagen de antes de esconderse. Toca métodos internos, así que la versión va fijada.
+- **Una sola instancia:** la garantiza un mutex con nombre, no el puerto, porque la API se puede apagar. El instalador usa los mismos nombres en `AppMutex`.
 
-## Instalar
+## Desarrollo
 
-Desde la carpeta del repo, `D:\IT\battery-tray`:
+Desde la carpeta del repo:
 
 ```powershell
 py -3.13 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\pythonw.exe battery_tray.py              # Programa de fondo
+.venv\Scripts\pythonw.exe battery_tray.py --settings   # Ventana
+.\build.ps1                                            # Instalador en build\installer
+```
+
+`build.ps1` necesita Inno Setup 6. El `.exe` instalado y el de desarrollo no pueden correr a la vez.
+
+Para probar el plugin sin instalador, enlazar la carpeta y reiniciar el Stream Deck:
+
+```powershell
 New-Item -ItemType Junction -Path "$env:APPDATA\Elgato\StreamDeck\Plugins\com.cali.battery.sdPlugin" -Target "$PWD\streamdeck\com.cali.battery.sdPlugin"
 ```
 
-Después, reiniciar el Stream Deck y arrastrar las teclas. Arranque automático al iniciar sesión:
-
-```powershell
-Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name BatteryTray -Value "`"$PWD\.venv\Scripts\pythonw.exe`" `"$PWD\battery_tray.py`""
-```
-
-Si se mueve la carpeta hay que rehacer los tres pasos: el `.venv` guarda rutas absolutas, y el enlace del plugin y la clave `Run` también.
-
-## Cambiar algo
-
-- **Programa:** salir desde la bandeja y arrancarlo con `.venv\Scripts\pythonw.exe battery_tray.py`. Solo admite una instancia: si el puerto está ocupado, la segunda sale sin avisar.
 - **Dibujo de la tecla:** `key.js`. Hay que reiniciar el Stream Deck para verlo.
-- **Iconos del plugin:** `streamdeck\make_icons.py` (solo para cambiar el dibujo).
-- **Dispositivo Bluetooth nuevo:** añadir su MAC a `BT_DEVICES` y su clave a `ORDER`; para tener tecla, una acción más en `manifest.json` con esa clave al final del `UUID`.
+- **Iconos del plugin:** `streamdeck\make_icons.py`, y el del programa, `installer\make_icon.py`.
 
 ## Quitar
 
-```powershell
-Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name BatteryTray
-cmd /c rmdir "$env:APPDATA\Elgato\StreamDeck\Plugins\com.cali.battery.sdPlugin"
-```
-
-`rmdir` quita solo el enlace del plugin, no su contenido en el repo.
+Desde «Instalar o quitar programas» de Windows. Los datos de `%LOCALAPPDATA%\battery-tray` no se borran.

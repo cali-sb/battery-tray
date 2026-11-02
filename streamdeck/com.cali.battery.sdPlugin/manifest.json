@@ -1,8 +1,8 @@
 {
   "Name": "Batería",
-  "Version": "1.0.0.0",
+  "Version": "2.0.0.0",
   "Author": "cali",
-  "Description": "Batería del ratón, los mandos y el teclado, leída de battery-tray.",
+  "Description": "Batería de periféricos inalámbricos, leída del programa Batería.",
   "SDKVersion": 2,
   "CodePath": "plugin.html",
   "Icon": "images/plugin",
@@ -11,10 +11,12 @@
   "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
   "Software": { "MinimumVersion": "6.4" },
   "Actions": [
-    { "UUID": "com.cali.battery.raton", "Name": "Ratón", "Tooltip": "Batería del ratón", "Icon": "images/action", "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
-    { "UUID": "com.cali.battery.dualsense", "Name": "DualSense", "Tooltip": "Batería del DualSense", "Icon": "images/action", "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
-    { "UUID": "com.cali.battery.xbox", "Name": "Xbox", "Tooltip": "Batería del mando Xbox", "Icon": "images/action", "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
-    { "UUID": "com.cali.battery.xbox_elite", "Name": "Xbox Elite", "Tooltip": "Batería del mando Xbox Elite", "Icon": "images/action", "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
-    { "UUID": "com.cali.battery.teclado", "Name": "Teclado", "Tooltip": "Batería del teclado", "Icon": "images/action", "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] }
+    { "UUID": "com.cali.battery.device", "Name": "Batería", "Tooltip": "Batería de un dispositivo", "Icon": "images/action", "PropertyInspectorPath": "inspector.html", "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
+    { "UUID": "com.cali.battery.raton", "Name": "Ratón", "Tooltip": "Batería del ratón", "Icon": "images/action", "VisibleInActionsList": false, "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
+    { "UUID": "com.cali.battery.cascos", "Name": "Cascos", "Tooltip": "Batería de los cascos", "Icon": "images/action", "VisibleInActionsList": false, "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
+    { "UUID": "com.cali.battery.dualsense", "Name": "DualSense", "Tooltip": "Batería del DualSense", "Icon": "images/action", "VisibleInActionsList": false, "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
+    { "UUID": "com.cali.battery.xbox", "Name": "Xbox", "Tooltip": "Batería del mando Xbox", "Icon": "images/action", "VisibleInActionsList": false, "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
+    { "UUID": "com.cali.battery.xbox_elite", "Name": "Xbox Elite", "Tooltip": "Batería del mando Xbox Elite", "Icon": "images/action", "VisibleInActionsList": false, "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] },
+    { "UUID": "com.cali.battery.teclado", "Name": "Teclado", "Tooltip": "Batería del teclado", "Icon": "images/action", "VisibleInActionsList": false, "SupportedInMultiActions": false, "States": [{ "Image": "images/key" }] }
   ]
 }

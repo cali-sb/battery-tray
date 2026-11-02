@@ -8,9 +8,11 @@ const GLYPHS = {
   mouse: "M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6zM12 7v3.5",
   gamepad: "M7.5 7h9a5 5 0 0 1 4.9 4l.9 4.5a2.7 2.7 0 0 1-4.8 2.2L15 15H9l-2.5 2.7a2.7 2.7 0 0 1-4.8-2.2l.9-4.5A5 5 0 0 1 7.5 7zM7.5 9.5v3M6 11h3M15.5 10.5h.01M17.5 12.5h.01",
   keyboard: "M4.5 6h15A2.5 2.5 0 0 1 22 8.5v7a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 15.5v-7A2.5 2.5 0 0 1 4.5 6zM6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8",
+  headset: "M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3",
+  battery: "M4 8h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM22 11v2",
   bolt: "M13.5 2 5 13.5h6L10 22l9-12.5h-6.2z"
 };
-const DEVICE_GLYPH = { raton: "mouse", dualsense: "gamepad", xbox: "gamepad", xbox_elite: "gamepad", teclado: "keyboard" };
+const KIND_GLYPH = { mouse: "mouse", headset: "headset", gamepad: "gamepad", keyboard: "keyboard", other: "battery" };
 
 function levelColours(level) {
   if (level == null) return ["#6b6b76", "#6b6b76"];
@@ -80,7 +82,7 @@ function renderKey(canvas, key, device) {
 
   const glyphColour = online ? "#c9c9d4" : "#6b6b76";
   if (charging && online) drawGlyph(ctx, "bolt", cx, 41, 24, "#ffd84a", true);
-  else drawGlyph(ctx, DEVICE_GLYPH[key] || "gamepad", cx, 41, 24, glyphColour, false);
+  else drawGlyph(ctx, KIND_GLYPH[device && device.kind] || "battery", cx, 41, 24, glyphColour, false);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
@@ -97,7 +99,7 @@ function renderKey(canvas, key, device) {
     ctx.textAlign = "center";
   }
 
-  const label = SHORT_NAMES[key] || (device ? device.name : key);
+  const label = SHORT_NAMES[key] || (device ? device.name : key || "Elegir");
   ctx.fillStyle = online ? "#c9c9d4" : "#6b6b76";
   fitFont(ctx, label, 600, 19, 78);
   ctx.fillText(label, cx, 131);
