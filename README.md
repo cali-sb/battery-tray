@@ -8,7 +8,7 @@ Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dis
 
 - **Instalar:** el `Litio-X.Y.Z-setup.exe` de la [última release](https://github.com/cali-sb/litio/releases/latest), sin permisos de administrador. El primer arranque abre los ajustes en la pestaña Buscar.
 - **Actualizar:** es automático. El programa busca en las releases de GitHub un minuto después de arrancar y luego cada 6 horas. Si hay una versión nueva, la descarga, comprueba su SHA-256, la instala en silencio y vuelve a abrirse. En *General* se puede desactivar; entonces la versión nueva se instala con el botón de esa pestaña o desde el menú de la bandeja.
-- **Bandeja:** un icono por dispositivo, solo mientras gasta batería: apagado o cargando, desaparece. Si no queda ninguno sale una pila vacía, que solo sirve para abrir el menú. Con clic derecho, las casillas de la lista eligen qué dispositivos pueden mostrarse, y «Ajustes…» abre la ventana.
+- **Bandeja:** un icono por dispositivo, solo mientras gasta batería: apagado o cargando, desaparece. Si no queda ninguno sale el rayo de Litio, que solo sirve para abrir el menú. Con clic derecho, las casillas de la lista eligen qué dispositivos pueden mostrarse, y «Ajustes…» abre la ventana.
 - **Ajustes:**
   - *Dispositivos:* nombre, tipo, colores y quitar.
   - *Buscar:* lo que hay en el PC y si es compatible.
@@ -97,7 +97,7 @@ New-Item -ItemType Junction -Path "$env:APPDATA\Elgato\StreamDeck\Plugins\com.ca
 ```
 
 - **Dibujo de la tecla:** `key.js`. Hay que reiniciar el Stream Deck para verlo.
-- **Iconos del plugin:** `streamdeck\make_icons.py`, y el del programa, `installer\make_icon.py`.
+- **Iconos:** el rayo de Litio se define una vez en `brand.py`. De ahí salen el del programa (`installer\make_icon.py`), los del plugin (`streamdeck\make_icons.py`) y el de la bandeja sin dispositivos. En SVG está repetido en `settings.qml` y `key.js`.
 
 ## Quitar
 

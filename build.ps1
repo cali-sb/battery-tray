@@ -21,6 +21,7 @@ if ($LASTEXITCODE) { throw 'Falló make_icon.py.' }
     --icon "$PSScriptRoot\installer\icon.ico" `
     --add-data "$PSScriptRoot\protocols.json;." `
     --add-data "$PSScriptRoot\settings.qml;." `
+    --add-data "$PSScriptRoot\installer\icon.ico;installer" `
     --hidden-import pystray._win32 `
     --hidden-import settings_app `
     --distpath build\dist --workpath build\work --specpath build `

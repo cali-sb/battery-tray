@@ -59,6 +59,7 @@ ApplicationWindow {
         tune: "M4 7h9M18 7h2M15.5 4.5v5M4 17h2M11 17h9M8.5 14.5v5",
         plus: "M12 5v14M5 12h14",
         download: "M12 4v11M7 10l5 5 5-5M5 20h14",
+        bolt: "M13.5 2 5 13.5h6L10 22l9-12.5h-6.2z",
         trash: "M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"
     })
     readonly property var kinds: [
@@ -90,6 +91,7 @@ ApplicationWindow {
         property string name: "other"
         property color ink: t.text
         property real stroke: 2
+        property bool filled: false
         implicitWidth: 20
         implicitHeight: 20
         Shape {
@@ -99,8 +101,8 @@ ApplicationWindow {
             transform: Scale { xScale: glyph.width / 24; yScale: glyph.height / 24 }
             ShapePath {
                 strokeColor: glyph.ink
-                strokeWidth: glyph.stroke
-                fillColor: "transparent"
+                strokeWidth: glyph.filled ? 0 : glyph.stroke
+                fillColor: glyph.filled ? glyph.ink : "transparent"
                 capStyle: ShapePath.RoundCap
                 joinStyle: ShapePath.RoundJoin
                 PathSvg { path: win.glyphs[glyph.name] || win.glyphs.other }
@@ -636,13 +638,19 @@ ApplicationWindow {
                     Rectangle {
                         width: 34
                         height: 34
-                        radius: 10
-                        color: t.accent
+                        radius: 9
+                        // El mismo degradado que el icono del programa (brand.py).
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "#62E686" }
+                            GradientStop { position: 1; color: "#16A04A" }
+                        }
                         Glyph {
                             anchors.centerIn: parent
-                            name: "other"
-                            stroke: 2.4
-                            ink: t.onAccent
+                            width: 26
+                            height: 26
+                            name: "bolt"
+                            filled: true
+                            ink: "#07180D"
                         }
                     }
                     Text {

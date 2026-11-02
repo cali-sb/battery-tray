@@ -7,7 +7,7 @@
   "CodePath": "plugin.html",
   "Icon": "images/plugin",
   "Category": "Litio",
-  "CategoryIcon": "images/action",
+  "CategoryIcon": "images/category",
   "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
   "Software": { "MinimumVersion": "6.4" },
   "Actions": [

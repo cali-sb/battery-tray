@@ -23,6 +23,7 @@ import pystray
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 from pystray._util import serialized_image, win32
 
+import brand
 import config
 import updater
 from devices import READERS
@@ -217,14 +218,8 @@ def neutral_ink(light):
 
 
 def idle_image(size, light):
-    """Pila vacía para el icono que solo sale si no hay dispositivos que mostrar."""
-    s = size * 8
-    image = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(image)
-    d.rounded_rectangle((s * 0.06, s * 0.28, s * 0.82, s * 0.72), radius=s // 12,
-                        outline=neutral_ink(light), width=s // 11)
-    d.rectangle((s * 0.86, s * 0.42, s * 0.95, s * 0.58), fill=neutral_ink(light))
-    return image.resize((size, size), Image.LANCZOS)
+    """El rayo de Litio, para el icono que solo sale si no hay dispositivos que mostrar."""
+    return brand.bolt_image(size, neutral_ink(light))
 
 
 def device_colour(device):
