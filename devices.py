@@ -109,7 +109,7 @@ def read_bluetooth_node(devinst):
 class BluetoothReader:
     """Propiedad de batería que Windows mantiene para lo que publica el estándar BLE."""
 
-    interval = retry = 30
+    interval = retry = 5
     needs_activity = False
 
     def __init__(self, device):
@@ -126,7 +126,7 @@ class LogitechReader:
     Solo contesta mientras el ratón se usa; por eso exige actividad en el PC.
     """
 
-    interval, retry = 60, 20
+    interval, retry = 10, 5
     needs_activity = True
     DEVICE = 1
     FEATURES = ((0x1004, 1, 2), (0x1000, 0, 2))  # (función, consulta, byte de estado)
@@ -185,7 +185,7 @@ class LogitechReader:
 
 
 class DualsenseReader:
-    interval = retry = 60
+    interval = retry = 5
     needs_activity = False
 
     def __init__(self, device=None):
@@ -244,7 +244,7 @@ class DualsenseReader:
 class ProtocolReader:
     """Modelo descrito en protocols.json: consultas de pregunta y respuesta por HID."""
 
-    interval = retry = 60
+    interval = retry = 5
     needs_activity = False
 
     def __init__(self, device):

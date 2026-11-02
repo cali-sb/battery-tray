@@ -72,15 +72,16 @@ def sync_state():
 
 def update(key, level=None, charging=False, online=True):
     """Guarda una lectura; sin nivel nuevo conserva el último conocido."""
+    new = {"online": online, "charging": charging}
+    if level is not None:
+        new["level"] = level
     with lock:
         current = state.get(key)
         if current is None:  # Lo han quitado mientras se leía.
             return
-        current["online"] = online
-        if level is not None:
-            current.update(level=level, charging=charging, updated=int(time.time()))
-        else:
-            current["charging"] = charging
+        if all(current.get(k) == v for k, v in new.items()):
+            return  # Se lee a menudo; el disco solo se toca si algo cambia.
+        current.update(new, updated=int(time.time()))
     write_state()
 
 
@@ -311,7 +312,7 @@ def tray_loop(icon, key, size, light):
                 icon.title = line(mine[1])[:127]
             icon.update_menu()
             icon.visible = key in active or (key == IDLE and not active)
-        icon.closing.wait(2)
+        icon.closing.wait(1)
     icon.visible = False
 
 

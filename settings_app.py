@@ -29,7 +29,7 @@ class Backend(QObject):
         self._live = {}
         self._scanning = False
         self.scanFinished.connect(self._on_scan)
-        self._timer = QTimer(self, interval=3000, timeout=self._refresh_live)
+        self._timer = QTimer(self, interval=1000, timeout=self._refresh_live)
         self._timer.start()
         self._refresh_live()
 

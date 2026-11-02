@@ -8,6 +8,7 @@
 const URL_ESTADO = "http://127.0.0.1:47631/battery.json";
 const GENERIC_ACTION = "device"; // Esta acción elige dispositivo; las antiguas lo llevan en el UUID.
 const keys = new Map(); // contexto -> dispositivo
+const painted = new Map(); // contexto -> lo último dibujado, para no repintar igual
 let socket, data = null;
 
 function deviceOf(action, settings) {
@@ -17,7 +18,11 @@ function deviceOf(action, settings) {
 
 function paint(context) {
   const key = keys.get(context);
-  const image = renderKey(document.getElementById("c"), key, data && data[key]);
+  const device = data && data[key];
+  const signature = key + JSON.stringify(device && [device.level, device.online, device.charging, device.name, device.kind]);
+  if (painted.get(context) === signature) return;
+  painted.set(context, signature);
+  const image = renderKey(document.getElementById("c"), key, device);
   socket.send(JSON.stringify({ event: "setImage", context, payload: { image, target: 0 } }));
 }
 
@@ -37,15 +42,15 @@ function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
     const m = JSON.parse(msg.data);
     if (m.event === "willAppear" || m.event === "didReceiveSettings") {
       keys.set(m.context, deviceOf(m.action, m.payload.settings));
+      painted.delete(m.context); // Al volver a la página la tecla llega vacía.
       paint(m.context);
       refresh();
     } else if (m.event === "willDisappear") {
       keys.delete(m.context);
-    } else if (m.event === "keyDown") {
-      refresh();
+      painted.delete(m.context);
     }
   };
-  setInterval(refresh, 15000);
+  setInterval(refresh, 1000); // Pregunta en local al programa, que ya tiene el dato: no cuesta nada.
 }
 </script>
 </body>
