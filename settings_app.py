@@ -173,7 +173,7 @@ def main():
         return
     QQuickStyle.setStyle("Basic")  # El único que permite dibujar los controles a medida.
     app = QGuiApplication(sys.argv)
-    app.setApplicationName("Batería")
+    app.setApplicationName("Litio")
     engine = QQmlApplicationEngine()
     backend = Backend()
     engine.rootContext().setContextProperty("backend", backend)

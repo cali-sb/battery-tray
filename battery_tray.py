@@ -351,7 +351,7 @@ def menu_items():
 
 def start_icon(key, size, light):
     icon = TrayIcon(f"battery-tray-{key}", idle_image(size, light),
-                    "Batería: ningún dispositivo en uso", pystray.Menu(menu_items))
+                    "Litio: ningún dispositivo en uso", pystray.Menu(menu_items))
     loop = threading.Thread(target=tray_loop, args=(icon, key, size, light), daemon=True)
     thread = threading.Thread(target=icon.run, args=(lambda i: loop.start(),))
     thread.start()

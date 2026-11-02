@@ -1,31 +1,37 @@
-; Lo compila build.ps1, que antes genera build\dist\Bateria con PyInstaller y pasa la
+; Lo compila build.ps1, que antes genera build\dist\Litio con PyInstaller y pasa la
 ; versión de version.py: ISCC /DAppVersion=X.Y.Z
 #ifndef AppVersion
   #error Compila con build.ps1 (o pasa /DAppVersion=X.Y.Z a ISCC)
 #endif
-#define AppName "Batería"
-#define Exe "Bateria.exe"
-; Los mismos nombres que config.py.
+#define AppName "Litio"
+#define Exe "Litio.exe"
+; Hasta la 2.1.0 se llamaba «Batería»: se instalaba en Programs\Bateria con Bateria.exe.
+#define OldDir "{localappdata}\Programs\Bateria"
+; Los mismos nombres que config.py. No cambian con el nombre: la versión vieja los usa.
 #define Mutexes "BatteryTrayMutex,BatteryTraySettingsMutex"
 #define PluginDir "{userappdata}\Elgato\StreamDeck\Plugins\com.cali.battery.sdPlugin"
 
 [Setup]
+; El AppId no cambia nunca: es lo que hace que una versión se instale encima de la anterior.
 AppId={{6F1B7C52-3D0A-4E5B-9A44-2B7E7C1D9A10}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=cali
-DefaultDirName={localappdata}\Programs\Bateria
+DefaultDirName={localappdata}\Programs\Litio
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; Sin esto, al actualizar se quedaría en la carpeta y el grupo del menú de «Batería».
+UsePreviousAppDir=no
+UsePreviousGroup=no
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 AppMutex={#Mutexes}
-AppPublisherURL=https://github.com/cali-sb/battery-tray
-AppUpdatesURL=https://github.com/cali-sb/battery-tray/releases
+AppPublisherURL=https://github.com/cali-sb/litio
+AppUpdatesURL=https://github.com/cali-sb/litio/releases
 VersionInfoVersion={#AppVersion}
 OutputDir=..\build\installer
-OutputBaseFilename=Bateria-{#AppVersion}-setup
+OutputBaseFilename=Litio-{#AppVersion}-setup
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#Exe}
 Compression=lzma2/max
@@ -40,15 +46,19 @@ Name: "autostart"; Description: "Arrancar al iniciar sesión"
 Name: "streamdeck"; Description: "Instalar el plugin del Stream Deck"; Check: StreamDeckInstalled
 
 [Files]
-Source: "..\build\dist\Bateria\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "..\build\dist\Litio\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Source: "..\streamdeck\com.cali.battery.sdPlugin\*"; DestDir: "{#PluginDir}"; Flags: recursesubdirs ignoreversion; Tasks: streamdeck
 
 [InstallDelete]
 ; Las librerías de la versión anterior se sustituyen enteras, sin dejar restos.
 Type: filesandordirs; Name: "{app}\_internal"
+; Restos de cuando se llamaba «Batería». Su desinstalador sobra: el de Litio lo sustituye.
+Type: filesandordirs; Name: "{#OldDir}"; Check: OldDirIsNotApp
+Type: filesandordirs; Name: "{userprograms}\Batería"
 
 [Icons]
-Name: "{group}\{#AppName}: ajustes"; Filename: "{app}\{#Exe}"; Parameters: "--settings"
+; Sin «:» en el nombre: Windows lo tomaría por un flujo de datos y el acceso no funcionaría.
+Name: "{group}\Ajustes de {#AppName}"; Filename: "{app}\{#Exe}"; Parameters: "--settings"
 Name: "{group}\{#AppName}"; Filename: "{app}\{#Exe}"
 
 [Registry]
@@ -64,6 +74,11 @@ Filename: "{win}\explorer.exe"; Parameters: """{app}\{#Exe}"""; Flags: nowait; C
 function StreamDeckInstalled: Boolean;
 begin
   Result := DirExists(ExpandConstant('{userappdata}\Elgato\StreamDeck'));
+end;
+
+function OldDirIsNotApp: Boolean;
+begin
+  Result := CompareText(ExpandConstant('{#OldDir}'), ExpandConstant('{app}')) <> 0;
 end;
 
 function IsUpdate: Boolean;

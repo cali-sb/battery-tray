@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Batería</title>
+<title>Litio</title>
 <style>
   body { margin: 0; padding: 8px; background: #2d2d2d; color: #d8d8d8; font: 13px "Segoe UI", sans-serif; }
   label { display: flex; align-items: center; gap: 8px; }
@@ -12,7 +12,7 @@
 </head>
 <body>
 <label>Dispositivo <select id="device"></select></label>
-<p id="hint" hidden>Sin datos: abre Batería y activa el Stream Deck en Ajustes, General.</p>
+<p id="hint" hidden>Sin datos: abre Litio y activa el Stream Deck en Ajustes, General.</p>
 <script>
 const URL_ESTADO = "http://127.0.0.1:47631/battery.json";
 const select = document.getElementById("device");

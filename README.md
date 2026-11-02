@@ -1,4 +1,4 @@
-# Batería
+# Litio
 
 Batería de ratones, cascos, mandos y teclados inalámbricos en Windows: iconos en la bandeja y teclas del Stream Deck, sin los programas de cada fabricante.
 
@@ -6,7 +6,7 @@ Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dis
 
 ## Uso
 
-- **Instalar:** el `Bateria-X.Y.Z-setup.exe` de la [última release](https://github.com/cali-sb/battery-tray/releases/latest), sin permisos de administrador. El primer arranque abre los ajustes en la pestaña Buscar.
+- **Instalar:** el `Litio-X.Y.Z-setup.exe` de la [última release](https://github.com/cali-sb/litio/releases/latest), sin permisos de administrador. El primer arranque abre los ajustes en la pestaña Buscar.
 - **Actualizar:** es automático. El programa busca en las releases de GitHub un minuto después de arrancar y luego cada 6 horas. Si hay una versión nueva, la descarga, comprueba su SHA-256, la instala en silencio y vuelve a abrirse. En *General* se puede desactivar; entonces la versión nueva se instala con el botón de esa pestaña o desde el menú de la bandeja.
 - **Bandeja:** un icono por dispositivo, solo mientras gasta batería: apagado o cargando, desaparece. Si no queda ninguno sale una pila vacía, que solo sirve para abrir el menú. Con clic derecho, las casillas de la lista eligen qué dispositivos pueden mostrarse, y «Ajustes…» abre la ventana.
 - **Ajustes:**
@@ -14,9 +14,10 @@ Son tres piezas: un programa de fondo ligero (`battery_tray.py`) que lee los dis
   - *Buscar:* lo que hay en el PC y si es compatible.
   - *General:* API del Stream Deck, aviso de batería baja y actualizaciones. Los cambios se aplican solos.
 - **Colores:** cada dispositivo usa color fijo o según nivel (verde desde 30 %, ámbar desde 15 %, rojo por debajo). Con color fijo, por debajo del aviso el número pasa a blanco sobre rojo.
-- **Stream Deck:** acción «Batería» en la categoría del mismo nombre, con un desplegable para elegir dispositivo. El anillo marca el nivel, el rayo sustituye al icono mientras carga y el gris indica el último dato. Las teclas por dispositivo de la versión 1 siguen funcionando, aunque esas acciones ya no salen en la lista.
+- **Stream Deck:** acción «Batería» en la categoría «Litio», con un desplegable para elegir dispositivo. El anillo marca el nivel, el rayo sustituye al icono mientras carga y el gris indica el último dato. Las teclas por dispositivo de la versión 1 siguen funcionando, aunque esas acciones ya no salen en la lista.
 - **API local:** `http://127.0.0.1:47631/battery.json`, solo en este PC. Existe para el Stream Deck y se puede desactivar; sin ella las teclas muestran `--`.
 - **Datos:** `%LOCALAPPDATA%\battery-tray` (`settings.json`, `state.json` y `battery-tray.log`). Desinstalar los conserva.
+- **Nombre:** hasta la 2.1.0 se llamaba «Batería». La 2.2.0 se mueve sola a `Programs\Litio` y borra la carpeta y el menú antiguos. Los nombres internos (carpeta de datos, mutex, clave de arranque y UUID del plugin) siguen igual, para que las versiones viejas se actualicen encima y las teclas del Stream Deck no se pierdan.
 
 ## Compatibilidad
 

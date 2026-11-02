@@ -11,7 +11,7 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 580
     visible: true
-    title: "Batería"
+    title: "Litio"
     color: t.bg
     font.family: "Segoe UI"
     font.pixelSize: 14
@@ -647,7 +647,7 @@ ApplicationWindow {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Batería"
+                        text: "Litio"
                         color: t.text
                         font.pixelSize: 18
                         font.weight: Font.Bold

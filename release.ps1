@@ -11,14 +11,14 @@ if (git status --porcelain) { throw 'Hay cambios sin commit: la release debe sal
 if (git tag -l $version) { throw "La $version ya existe: sube la versión en version.py." }
 
 & .\build.ps1
-$setup = "build\installer\Bateria-$version-setup.exe"
+$setup = "build\installer\Litio-$version-setup.exe"
 if (-not (Test-Path $setup)) { throw "No se generó $setup." }
 
 git push origin main
 if ($LASTEXITCODE) { throw 'Falló el push de main.' }
-git tag -a $version -m "Batería $version"
+git tag -a $version -m "Litio $version"
 if ($LASTEXITCODE) { throw 'Falló git tag.' }
 git push origin $version
 if ($LASTEXITCODE) { throw 'Falló el push de la etiqueta.' }
-gh release create $version $setup --verify-tag --title "Batería $version" --notes $Notes
+gh release create $version $setup --verify-tag --title "Litio $version" --notes $Notes
 if ($LASTEXITCODE) { throw 'Falló gh release create.' }

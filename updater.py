@@ -24,11 +24,11 @@ from pathlib import Path
 import config
 from version import __version__
 
-REPO = "cali-sb/battery-tray"
+REPO = "cali-sb/litio"  # Antes cali-sb/battery-tray: GitHub redirige, y la 2.1.0 lo encuentra igual.
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases?per_page=20"
 INSTALLER_RE = re.compile(r"setup.*\.exe$", re.IGNORECASE)
-USER_AGENT = f"Bateria/{__version__}"
-DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "Bateria-update"
+USER_AGENT = f"Litio/{__version__}"
+DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "Litio-update"
 STATUS_FILE = config.DATA_DIR / "update.json"
 REQUEST_FILE = config.DATA_DIR / "update-request"
 FIRST_CHECK = 60  # s tras arrancar: no estorbar al inicio de sesión.

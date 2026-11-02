@@ -17,7 +17,7 @@ Write-Host "Versión $version"
 if ($LASTEXITCODE) { throw 'Falló pip.' }
 & $python installer\make_icon.py
 if ($LASTEXITCODE) { throw 'Falló make_icon.py.' }
-& $python -m PyInstaller --noconfirm --clean --windowed --name Bateria `
+& $python -m PyInstaller --noconfirm --clean --windowed --name Litio `
     --icon "$PSScriptRoot\installer\icon.ico" `
     --add-data "$PSScriptRoot\protocols.json;." `
     --add-data "$PSScriptRoot\settings.qml;." `
@@ -29,6 +29,6 @@ if ($LASTEXITCODE) { throw 'Falló PyInstaller.' }
 & $iscc "/DAppVersion=$version" installer\battery-tray.iss
 if ($LASTEXITCODE) { throw 'Falló Inno Setup.' }
 
-$setup = Get-Item "build\installer\Bateria-$version-setup.exe"
+$setup = Get-Item "build\installer\Litio-$version-setup.exe"
 Write-Host "Instalador: $($setup.FullName) ($([math]::Round($setup.Length / 1MB)) MB)"
 Write-Host "SHA-256:    $((Get-FileHash $setup -Algorithm SHA256).Hash.ToLower())"
